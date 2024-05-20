@@ -1,0 +1,117 @@
+---
+title: "데이터애널리틱스_과제1"
+author: "이준엽"
+date: "2024-03-20"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(leaflet)
+library(tidyr)
+
+
+```
+
+#데이터 로드
+
+```{r}
+monthly_air_quality <- read.csv("monthly_air_quality_seoul.csv", fileEncoding = "euc-kr")
+station_coord <- read.csv("station_coord.csv", fileEncoding = "euc-kr")
+```
+
+\# 구별 미세먼저 평균 수치 막대 그래프
+
+```{r}
+# 구별 미세먼지(PM10) 평균 계산
+avg_pm10_by_district <- monthly_air_quality %>%
+  group_by(측정소명) %>%
+  summarize(Avg_PM10 = mean(미세먼지, na.rm = TRUE))
+
+# 계산된 평균을 바탕으로 시각화
+ggplot(avg_pm10_by_district, aes(x = reorder(측정소명, Avg_PM10), y = Avg_PM10)) +
+  geom_bar(stat = "identity", fill = "skyblue") +  # 막대 색상 추가
+  coord_flip() +
+  labs(title = "서울시 구별 미세먼지(PM10) 평균 수치",
+       x = "구",
+       y = "평균 PM10 수치") +
+  theme_minimal()
+```
+
+\# 서울시 구별 미세먼지와 초미세먼지 평균 수치 비교( 이중막대 그래프)
+
+```{r}
+# 서울시 구별 미세먼지와 초미세먼지 평균 수치 계산
+avg_pollution_by_district <- monthly_air_quality %>%
+  group_by(측정소명) %>%
+  summarize(Avg_PM10 = mean(미세먼지, na.rm = TRUE),
+            Avg_PM25 = mean(초미세먼지, na.rm = TRUE)) %>%
+  pivot_longer(cols = c(Avg_PM10, Avg_PM25), names_to = "Pollutant", values_to = "Average")
+
+# 이중 막대 그래프로 시각화
+ggplot(avg_pollution_by_district, aes(x = 측정소명, y = Average, fill = Pollutant)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Avg_PM10" = "steelblue", "Avg_PM25" = "darkorange")) +
+  labs(title = "서울시 구별 미세먼지와 초미세먼지 평균 수치 비교",
+       x = "구", y = "평균 수치") +
+  theme_minimal()
+
+```
+
+#동작구 연도별 미세먼지 평균 수치
+
+```{r}
+# 동작구 데이터 필터링
+dongjak_data <- monthly_air_quality %>%
+  filter(측정소명 == "동작구")
+
+# '측정월'에서 연도 정보 추출
+dongjak_data <- dongjak_data %>%
+  mutate(Year = substr(측정월, 1, 4))  
+
+
+# 연도별 평균 미세먼지 수치 계산
+yearly_avg_pm10 <- dongjak_data %>%
+  group_by(Year) %>%
+  summarize(Avg_PM10 = mean(미세먼지, na.rm = TRUE))
+
+# 결과 시각화
+ggplot(yearly_avg_pm10, aes(x = Year, y = Avg_PM10, group =1)) +
+  geom_line() +  
+  geom_point() +  
+  labs(title = "동작구 연도별 미세먼지(PM10) 평균 수치",
+       x = "연도", y = "평균 PM10 수치") +
+  theme_minimal()
+```
+
+\# 측정소 위치 지도 시각화(미세먼지 수치 반영)
+
+```{r}
+# 최신 월의 데이터만 선택 (예시: 202403)
+latest_air_quality <- filter(monthly_air_quality, 측정월 == "202403")
+
+# 측정소별 미세먼지 평균 수치 계산
+avg_pm10 <- latest_air_quality %>%
+  group_by(측정소명) %>%
+  summarize(Avg_PM10 = mean(미세먼지, na.rm = TRUE))
+
+# 측정소 좌표 데이터와 결합
+combined_data <- left_join(station_coord, avg_pm10, by = "측정소명")
+
+# 색상 팔레트 설정
+pal <- colorNumeric(palette = "viridis", domain = combined_data$Avg_PM10)
+
+# 지도 시각화
+leaflet(combined_data) %>%
+  addTiles() %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude, 
+                   color = ~pal(Avg_PM10), fillColor = ~pal(Avg_PM10),
+                   fillOpacity = 0.8, radius = 8, popup = ~paste(측정소명, "평균 PM10:", Avg_PM10)) %>%
+  addLegend("bottomright", pal = pal, values = ~Avg_PM10,
+            title = "평균 PM10 농도", opacity = 1)
+
+
+```

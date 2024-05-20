@@ -1,0 +1,254 @@
+---
+title: "데이터애널리틱스_과제2"
+author: "이준엽"
+date: "2024-04-01"
+output: html_document
+---
+<br/>
+
+### 1번문제
+
+1. Stratified sampling을 통해 traing set과 test set을 70:30 비율로 분할하고, 두 set에서의 target 변
+수의 분포를 비교해보자.
+
+```{r message=FALSE, warning=FALSE}
+# 필요한 패키지 로드
+library(caret)
+library(ISLR)
+library(ggplot2)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Carseats 데이터셋 준비
+data(Carseats)
+# 첫 100개의 데이터 사용
+Carseats <- Carseats[1:100, ] 
+
+```
+
+```{r message=FALSE, warning=FALSE}
+Carseats
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+# 데이터 분할
+set.seed(123)
+trainIndex <- createDataPartition(Carseats$Sales, p=0.7, list=FALSE)
+trainSet <- Carseats[trainIndex, ]
+testSet <- Carseats[-trainIndex, ]
+
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+# 데이터 분할
+set.seed(123)
+trainIndex <- createDataPartition(Carseats$Sales, p=0.7, list=FALSE)
+trainSet <- Carseats[trainIndex, ]
+testSet <- Carseats[-trainIndex, ]
+
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+# 두 세트에서 Sales의 분포 요약
+summary(trainSet$Sales)
+summary(testSet$Sales)
+
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+# 훈련 세트와 테스트 세트의 Sales 분포 시각화
+p1 <- ggplot(trainSet, aes(x = Sales)) + 
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.5) +
+  ggtitle("Training Set Sales Distribution") +
+  theme_minimal()
+
+p2 <- ggplot(testSet, aes(x = Sales)) + 
+  geom_histogram(bins = 30, fill = "red", alpha = 0.5) +
+  ggtitle("Test Set Sales Distribution") +
+  theme_minimal()
+
+# 그래프 출력
+gridExtra::grid.arrange(p1, p2, nrow = 2)
+```
+
+<br/>
+
+### 1번 문제 분석결과
+
+훈련 세트트 최소가 0.910, 테스트는 최소가 2.07 로 많은 차이를 보여줍니다 .이는 테스트 세트가 훈련 세트보다 조금 더 좁은 Sales 범위를 가짐을 나타냅니다.
+하지만 평균이 7.595, 7.698  비슷한 추치 나태내어, 중심 경향성이 비슷할 것으로 예측할 수 있습니다.
+
+훈련 세트와 테스트 세트는 Sales에 대해 유사한 분포를 보여주고 있으며, 이는 모델 학습과 평가에 있어 비교적 공정한 기준이 마련되었음 시사하는 것 같습니다.
+
+
+<br/>
+
+### 2번문제
+
+2. k-nn 을 적용한다. 이때 5-fold CV를 사용하여 parameter k의 값을 결정해 보고자한다. CV의 반복횟수
+를 1, 5, 10, 15, 20으로 점점 증가시켜 본다. 어떠한 경향을 관찰할 수 있는가?  best k 값, k 값의 변화에 
+따른 RMSE의 변화 그래프 등을 비교해본다. 그리고 최종적으로 best k 값을 합리적으로 결정하자.  
+
+```{r message=FALSE, warning=FALSE}
+
+repeats <- c(1, 5, 10, 15, 20)
+
+knnResults <- lapply(repeats, function(x) {
+  control <- trainControl(method="repeatedcv", number=5, repeats=x) # 5-fold CV 사용
+  grid <- expand.grid(k=1:20) # k 값의 범위 설정
+
+  set.seed(123)
+  knnFit <- train(Sales ~ ., data=trainSet, method="knn", tuneGrid=grid, trControl=control)
+
+  return(list(bestK=knnFit$bestTune$k, results=knnFit$results))
+})
+
+for (i in 1:length(repeats)) {
+  best_k <- knnResults[[i]]$bestK
+  min_rmse <- min(knnResults[[i]]$results$RMSE)
+
+  cat("Repeats:", repeats[i], "\n")
+  cat("Best k:", best_k, "\n")
+  cat("RMSE for best k:", min_rmse, "\n\n")
+}
+
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+# 결과를 데이터 프레임으로 변환
+results_df <- data.frame(
+  Repeats = repeats,
+  K = sapply(knnResults, function(x) x$bestK),
+  RMSE = sapply(knnResults, function(x) min(x$results$RMSE))
+)
+
+
+# 반복 횟수별로 그래프 그리기
+for(i in 1:length(repeats)) {
+ # 현재 반복 횟수의 결과 데이터 프레임 생성
+  current_df <- data.frame(
+    Neighbors = 1:20, # k 값의 범위
+    RMSE = knnResults[[i]]$results$RMSE # RMSE 정보 추출
+  )
+  
+  # ggplot으로 그래프 그리기
+  p <- ggplot(current_df, aes(x = Neighbors, y = RMSE)) +
+    geom_line(colour="blue") + # 선 그래프
+    geom_point()
+    labs(title = paste("CV Repeats:", repeats[i], "- RMSE vs. Neighbors"),
+         x = "Neighbors", # x축 레이블
+         y = "RMSE") + # y축 레이블
+    theme_minimal() # 테마 설정
+  
+  print(p) # 그래프 출력
+
+}
+```
+<br/>
+
+### 분석 결과
+
+반복 횟수가 1과 5일 때, 최적의 k 값은 13으로 동일합니다. 이는 초기 반복에서는 모델이 비교적 적은 이웃 수를 선호함을 나타냅니다.
+반복 횟수가 10 이상일 때, 최적의 k 값은 19로 증가하며, 이 값이 더 낮은 RMSE를 달성하는데 도움이 됨을 보여줍니다. 
+
+반복 횟수가 5일 때 RMSE는 가장 낮은 2.999027을 기록합니다. 이는 모델이 이 설정에서 가장 정확한 예측을 제공함을 의미합니다.
+반복 횟수가 증가함에 따라 RMSE는 약간 증가하는 경향을 보이며, 이는 더 많은 반복으로 인한 더 많은 변동성과 데이터의 노이즈가 모델에 더 크게 영향을 미칠 수 있음을 나타냅니다.
+
+
+ 교차 검증의 반복 횟수를 늘리는 것이 반드시 모델의 성능을 향상시키지는 않으며, 데이터와 문제에 가장 적합한 모델 구성을 찾기 위해 다양한 설정을 실험하는 것이 중요함을 강조합니다.
+
+
+<br/>
+
+### 3번 문제제
+
+
+3. 2번에서 k-nn 모델의 best k를 선택할 때 사용한 동일한 CV 세팅에 대해, 10개의 feature들을 모두 사
+용하는 linear regression 모델의 성능을 평가해보자. RMSE 기준으로 k-nn과 linear regression 중 
+어떤 모델이 더 우수한가?
+
+
+
+```{r message=FALSE, warning=FALSE}
+
+# 선형 회귀 모델 설정 및 훈련 (동일한 CV 설정 사용)
+set.seed(123)
+cv <- trainControl(method = "repeatedcv", number = 5, repeats = 5)
+lmFit <- train(Sales ~ ., data=trainSet, method="lm", trControl=cv)
+
+# k 값에 대한 그리드 설정
+tuneGrid <- expand.grid(k = 13)
+
+# k-NN 모델 설정 및 훈련
+set.seed(123)
+knnFit <- train(Sales ~ ., data=trainSet, method="knn", tuneGrid=tuneGrid, trControl=cv)
+
+# 선형 회귀 모델과 k-NN 모델의 RMSE 비교
+results <- data.frame(
+  Model = c("Linear Regression", "k-NN"),
+  RMSE = c(min(lmFit$results$RMSE), min(knnFit$results$RMSE))
+)
+
+
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+
+print(results)
+
+```
+
+<br/>
+
+###분석 결과
+
+선형 회귀 모델과 k-NN 모델을 Carseats 데이터셋에 적용한 결과, 선형 회귀 모델이 RMSE 기준으로 더 우수한 성능을 보였습니다. 구체적으로, 선형 회귀 모델의 RMSE는 약 1.072이고, k-NN 모델의 RMSE는 약 2.999입니다.
+
+<br/>
+
+### 4번 문제
+
+두 모델 중 우수한 모델을 test set에 적용해보자. CV에서 계산된 RMSE와 test set에 대한 RMSE 값을 
+비교해보자. 두 값이 충분히 유사한가? 그렇지 않은가? 결과를 분석해보자.
+
+
+```{r message=FALSE, warning=FALSE}
+
+
+# 테스트 세트에 대한 예측 수행
+predictions_lm <- predict(lmFit, newdata=testSet)
+
+# 테스트 세트에 대한 RMSE 계산
+rmse_test_lm <- sqrt(mean((predictions_lm - testSet$Sales)^2))
+
+# 교차 검증에서의 RMSE 값
+cv_rmse_lm <- min(lmFit$results$RMSE)
+
+# 결과 출력
+cat("교차 검증(CV)에서의 RMSE:", cv_rmse_lm, "\n")
+cat("테스트 세트에 대한 RMSE:", rmse_test_lm, "\n")
+
+
+
+
+```
+<br/>
+
+교차 검증(CV)에서의 RMSE와 테스트 세트에 대한 RMSE의 값을 비교함으로써, 모델의 일반화 능력을 평가할 수 있었습니니다. 두 RMSE 값이 서로 유사했습니다.
+
+모델이 훈련 데이터에 과적합되지 않고 새로운 데이터에 대해서도 비슷한 성능을 보인다는 것을 의미합니다.
